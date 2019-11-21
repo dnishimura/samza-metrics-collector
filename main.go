@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -69,9 +70,9 @@ func recordMetrics(mr *MetricsReport, metricsRegistry map[string]prometheus.Metr
 	}
 }
 
-func consumeMetricsStream() {
+func consumeMetricsStream(bootstrapServers string) {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": "localhost",
+		"bootstrap.servers": bootstrapServers,
 		"group.id":          "samza-metrics-collector",
 		"auto.offset.reset": "latest",
 	})
@@ -106,7 +107,10 @@ func consumeMetricsStream() {
 }
 
 func main() {
-	go consumeMetricsStream()
+	bootstrapServers := flag.String("kafka.bootstrap.servers", "localhost", "comma delimited list of hostname:[port] bootstrap servers for kafka")
+	flag.Parse()
+
+	go consumeMetricsStream(*bootstrapServers)
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(":2112", nil)
