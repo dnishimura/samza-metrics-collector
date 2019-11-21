@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strings"
 )
 
 type MetricsReport struct {
@@ -47,41 +46,22 @@ func recordMetrics(mr *MetricsReport, metricsRegistry map[string]prometheus.Metr
 
 			switch val := val.(type) {
 			case json.Number:
-				if strings.Contains(val.String(), ".") {
-					fval, err := val.Float64()
-					if err != nil {
-						log.Fatal(err)
-					}
-					var gauge prometheus.Gauge
-					if g, found := metricsRegistry[fqn]; found {
-						if g, ok := g.(prometheus.Gauge); ok {
-							gauge = g
-						} else {
-							log.Fatal("Metrics cannot switch between types")
-						}
-					} else {
-						gauge = promauto.NewGauge(prometheus.GaugeOpts{Name: fqn})
-						metricsRegistry[fqn] = gauge
-					}
-					gauge.Add(fval)
-				} else {
-					fval, err := val.Float64()
-					if err != nil {
-						log.Fatal(err)
-					}
-					var counter prometheus.Counter
-					if c, found := metricsRegistry[fqn]; found {
-						if c, ok := c.(prometheus.Counter); ok {
-							counter = c
-						} else {
-							log.Fatal("Metrics cannot switch between types")
-						}
-					} else {
-						counter = promauto.NewCounter(prometheus.CounterOpts{Name: fqn})
-						metricsRegistry[fqn] = counter
-					}
-					counter.Add(fval)
+				fval, err := val.Float64()
+				if err != nil {
+					log.Fatal(err)
 				}
+				var gauge prometheus.Gauge
+				if g, found := metricsRegistry[fqn]; found {
+					if g, ok := g.(prometheus.Gauge); ok {
+						gauge = g
+					} else {
+						log.Fatal("Metrics cannot switch between types")
+					}
+				} else {
+					gauge = promauto.NewGauge(prometheus.GaugeOpts{Name: fqn})
+					metricsRegistry[fqn] = gauge
+				}
+				gauge.Set(fval)
 			case bool:
 				fmt.Printf("Won't report bool metric: %s - %v", fqn, val)
 			}
@@ -93,7 +73,7 @@ func consumeMetricsStream() {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": "localhost",
 		"group.id":          "samza-metrics-collector",
-		"auto.offset.reset": "earliest",
+		"auto.offset.reset": "latest",
 	})
 
 	if err != nil {
@@ -118,7 +98,6 @@ func consumeMetricsStream() {
 				log.Fatal(err)
 			}
 			recordMetrics(metricsReport, metricsRegistry)
-			fmt.Printf("Unmarshalled to %v", metricsReport)
 		} else {
 			// The client will automatically try to recover from all errors.
 			fmt.Printf("Consumer error: %v (%v)\n", err, msg)
